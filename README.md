@@ -9,13 +9,29 @@ Easily declare your RESTful API and use it directly.
 
 ```python
 @endpoint('https://api.ipify.org')
-def get_my_ip(spec):
+@decode()
+def get_my_ip(params):
     pass
+
+print(get_my_ip())
 ```
 
-`print(get_my_ip().read())` will print your IP address. How simple!
+The code above will simply print your IP address.
+It's a piece of cake, isn't it?
 
-The function body can mutate the request parameter without any limitation.
+```python
+@endpoint('http://whatsmyuseragent.org')
+@findall(r'user-agent.*\s*.*intro-text.*?>([^<]*)')
+@rethook(lambda r: r[0])
+def get_my_user_agent(params, my_user_agent='DeclREST/1.0'):
+    params.headers['User-Agent'] = my_user_agent
+
+get_my_user_agent('Test-UA')  # returns 'Test-UA'
+```
+
+- The function body can mutate the request parameters without any limitation.
+- `@findall` finds all matches using `re.findall()`.
+- `@rethook` hooks the return value and mutates it.
 
 String-formatting is also supported using `str.format()` syntax in python.
 
@@ -28,7 +44,5 @@ Thank you.
 ## Todo list
 - Support for sequenced query/body. ex) filename[]=..&filename[]=..
 - Support for classes (global decorator)
-- Support for various decoder decorators. ex) @json, @read
-- Support for string-formatting by function parameters (kwargs)
 - Support for asyncio
 - Add details for README.md
