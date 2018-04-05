@@ -4,7 +4,7 @@ from declrest import endpoint, GET, query, form, header, f, body, \
     json_decode, decode, findall, rethook
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     @endpoint('https://api.ipify.org')
     @decode()
@@ -39,15 +39,14 @@ if __name__ == '__main__':
     print(get_my_user_agent('TEST-UA'))
     print(get_weather())
 
+    @endpoint(f('https://{self.__class__.__name__}.com/{user_id}/{repo}'))
     class Repo:
-        @classmethod
-        @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
-        @decode()
-        def get_repo(cls, user_id, repo='declrest', *, params):
+        @GET()  # at least one DeclREST decorator is required
+        def get_repo(self, user_id, repo='declrest', *, params):
             # or
-            params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
+            params.endpoint = f'{self.__class__.__name__}.com/{user_id}/{repo}'
 
     class Github(Repo):
         pass
 
-    Github.get_repo('qbx2')
+    Github().get_repo('qbx2')

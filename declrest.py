@@ -16,6 +16,21 @@ class DeclRESTParams(defaultdict):
     def __init__(self, default_factory=list):
         super().__init__(default_factory)
 
+    def to_base_params(self):
+        params = copy.deepcopy(self)
+
+        # noinspection PyProtectedMember
+        defaults = {
+            'scheme': 'http',
+            'method': 'GET',
+            'headers': {},
+        }
+
+        for k, v in defaults.items():
+            params.setdefault(k, v)
+
+        return params
+
     def __setattr__(self, key, value):
         self[key] = value
 
@@ -45,27 +60,15 @@ class DeclRESTParamsDescriptor:
                callable(func) or hasattr(func, '__get__')
 
         self.params_mutator = func
-        self.base_params = DeclRESTParams()
+        self.declrest_base_params = DeclRESTParams()
         self.instance = None
 
-    def to_params(self):
-        params = copy.deepcopy(self.base_params)
-
-        # noinspection PyProtectedMember
-        defaults = {
-            'scheme': 'http',
-            'method': 'GET',
-            'headers': {},
-        }
-
-        for k, v in defaults.items():
-            params.setdefault(k, v)
-
-        return params
+    def to_base_params(self):
+        return self.declrest_base_params.to_base_params()
 
     def __get__(self, instance=None, owner=None):
         return DeclRESTRequest(
-            self.to_params(), self.params_mutator, instance, owner)
+            self.to_base_params(), self.params_mutator, instance, owner)
 
     def __call__(self, *args, **kwargs):
         return self.__get__()(*args, **kwargs)
@@ -80,6 +83,8 @@ class DeclRESTRequest:
 
     def __init__(
             self, base_params, params_mutator=None, instance=None, owner=None):
+        self._params_mutator = params_mutator
+
         try:
             params_mutator = params_mutator.__get__(instance, owner)
         except (AttributeError, TypeError):
@@ -90,7 +95,6 @@ class DeclRESTRequest:
         self.instance = instance
         self.owner = owner
 
-    # noinspection PyShadowingNames
     def __call__(self, *args, **kwargs):
         params = self.build_params(*args, **kwargs)
 
@@ -195,6 +199,16 @@ class DeclRESTRequest:
             sig_params_dict = {}
             sig_params = \
                 inspect.signature(self.params_mutator).parameters.items()
+            logger.debug(f'sig_params={sig_params}')
+
+            cls = self.get_cls()
+
+            if isinstance(self._params_mutator, classmethod) and \
+                    cls is not None:
+                sig_params_dict['cls'] = cls
+
+            if self.instance is not None:
+                sig_params_dict['self'] = self.instance
 
             for (k, v), arg in zip_longest(sig_params, args, fillvalue=_None):
                 if k == 'params':
@@ -209,8 +223,47 @@ class DeclRESTRequest:
 
         return format_source
 
+    def get_cls(self):
+        instance, owner = self.instance, self.owner
+        logger.debug(f'instance={instance}, owner={owner}')
+
+        if instance is not None or owner is not None:
+            cls = owner
+
+            if cls is None:
+                cls = type(instance)
+
+            return cls
+
+        return None
+
+    def get_declrest_base_params(self, *args):
+        cls = self.get_cls()
+
+        if cls is not None:
+            try:
+                return cls.declrest_base_params.to_base_params()
+            except AttributeError:
+                pass
+
+        try:
+            cls = args[0]
+
+            if inspect.isclass(cls):
+                return cls.declrest_base_params.to_base_params()
+        except (IndexError, AttributeError):
+            pass
+
+        return None
+
     def build_params(self, *args, **kwargs):
-        params = copy.deepcopy(self.base_params)
+        params = copy.deepcopy(self.get_declrest_base_params(*args))
+        logger.debug(f'declrest_base_params={params}')
+
+        if params is None:
+            params = copy.deepcopy(self.base_params)
+        else:
+            params.update(self.base_params)
 
         for source_key, target_key in self.KEY_VALUE_PARAMS.items():
             # use get to prevent defaultdict from creating list() by KeyError
@@ -345,13 +398,18 @@ def _single(params, key):
 
 # decorator
 def _add_param(obj, **kwargs):
-    if not isinstance(obj, DeclRESTParamsDescriptor):
-        desc = DeclRESTParamsDescriptor(obj)
-    else:
+    if isinstance(obj, DeclRESTParamsDescriptor):
         desc = obj
+    elif inspect.isclass(obj):
+        if not hasattr(obj, 'declrest_base_params'):
+            obj.declrest_base_params = DeclRESTParams()
+
+        desc = obj
+    else:
+        desc = DeclRESTParamsDescriptor(obj)
 
     for k, v in kwargs.items():
-        desc.base_params[k] += [v]
+        desc.declrest_base_params[k] += [v]
 
     return desc
 

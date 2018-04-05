@@ -38,13 +38,14 @@ get_my_user_agent('Test-UA')  # returns 'Test-UA'
 ### How about this?
 
 ```python
+@endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
 class Repo:
     @classmethod
-    @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
-    @decode()
-    def get_repo(cls, user_id, repo='declrest', *, params):  # or declare params as keyword argument using *
+    @GET()  # at least one DeclREST decorator is required
+    def get_repo(cls, user_id, repo='declrest', *, params):  # mark params as keyword argument using *
         # or
-        params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
+        # params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
+        pass
 
 class Github(Repo):
     pass
@@ -52,15 +53,14 @@ class Github(Repo):
 Github.get_repo('qbx2')
 ```
 
-String-formatting is also supported using `str.format()` syntax in python.
+You can provide default decorators for methods by decorating classes like above.
+
+Also, string-formatting is also supported using `str.format()` syntax in python.
 Supported keys are the names of parameters passed to the function and keys in `params`.
 
-Checkout test.py for more usage.
-
-Thank you.
+Please check out test.py for more usage.
 
 ## Todo list
 - Support for sequenced query/body. ex) filename[]=..&filename[]=..
-- Support for classes (global decorator)
 - Support for asyncio
 - Add details for README.md
