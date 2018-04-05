@@ -1,11 +1,13 @@
 import copy
 import functools
 import http.client
+import inspect
 import json
+import logging
 import re
 import urllib.parse
-import logging
 from collections import defaultdict, Sequence
+from itertools import zip_longest
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,8 @@ class DeclRESTParams(defaultdict):
 
 class DeclRESTParamsDescriptor:
     def __init__(self, func):
-        assert callable(func) and not isinstance(func, type(self))
+        assert not isinstance(func, type(self)) and \
+               callable(func) or hasattr(func, '__get__')
 
         self.params_mutator = func
         self.base_params = DeclRESTParams()
@@ -61,7 +64,8 @@ class DeclRESTParamsDescriptor:
         return params
 
     def __get__(self, instance=None, owner=None):
-        return DeclRESTRequest(self.to_params(), self.params_mutator, instance)
+        return DeclRESTRequest(
+            self.to_params(), self.params_mutator, instance, owner)
 
     def __call__(self, *args, **kwargs):
         return self.__get__()(*args, **kwargs)
@@ -74,26 +78,33 @@ class DeclRESTRequest:
         'header': 'headers',
     }
 
-    def __init__(self, base_params, params_mutator=None, instance=None):
+    def __init__(
+            self, base_params, params_mutator=None, instance=None, owner=None):
+        try:
+            params_mutator = params_mutator.__get__(instance, owner)
+        except (AttributeError, TypeError):
+            pass
+
         self.base_params = base_params
         self.params_mutator = params_mutator
         self.instance = instance
+        self.owner = owner
 
     # noinspection PyShadowingNames
     def __call__(self, *args, **kwargs):
         params = self.build_params(*args, **kwargs)
 
         _endpoint = _single(params, 'endpoint')
-        _scheme, _netloc, *_ = \
+        _scheme, _netloc, *_path_components = \
             urllib.parse.urlsplit(_endpoint, scheme=None)
 
         if _scheme is None:
             scheme = params.scheme
-            _netloc = _endpoint.strip('/')
+            _netloc = _netloc or re.findall(r'^[:/]*([^/]*)', _endpoint)[0]
         else:
             scheme = _scheme.lower()
 
-        params['endpoint'] = _netloc
+        params['endpoint'] = type(_endpoint)(_netloc)
         params['method'] = _maybe(params, 'method', 'GET')
         params['headers'] = params.headers
 
@@ -101,39 +112,54 @@ class DeclRESTRequest:
         assert len(_body) == 1, f'body requires 1 parameter but got {_body}'
         params['body'] = _body[0]
 
-        _path = _maybe(params, 'path', '/')
+        _path = _maybe(params, 'path')
+
+        if _path is None:
+            _path, _query, _fragment = _path_components
+            _path = _path or '/'
+
+            if _query:
+                _path += f'?{query}'
+
+            if _fragment:
+                _path += f'#{fragment}'
+
+            params.path = type(_endpoint)(_path)
+
         _query = params.query
         # use get to prevent defaultdict from creating list() by KeyError
         _form = params.get('form')
 
         params['timeout'] = _maybe(params, 'timeout')
 
-        format_source = dict(params)
-        format_source.update(path=_path, query=_query, form=_form)
-
-        if self.instance is not None:
-            format_source['self'] = self.instance
-
+        _kwargs = copy.deepcopy(kwargs)
+        _kwargs.update({
+            'query': _query,
+            'path': _path,
+            'form': _form,
+        })
+        format_source = self.build_format_source(params, *args, **_kwargs)
+        logger.info(f'format_source={format_source}')
         params = self.format_params(params, format_source)
-        logger.debug(f'params: {params}')
-        logger.debug(f'endpoint={params.endpoint}, timeout={params.timeout}')
+        logger.info(f'params: {params}')
+        logger.info(f'endpoint={params.endpoint}, timeout={params.timeout}')
 
         conn = self.create_connection(scheme, params.endpoint, params.timeout)
         # noinspection PyProtectedMember
-        logger.debug(f'{params.method} {params.url} {conn._http_vsn_str}')
+        logger.info(f'{params.method} {params.url} {conn._http_vsn_str}')
 
         for k, v in params.headers.items():
-            logger.debug(f'{k}: {v}')
+            logger.info(f'{k}: {v}')
 
         if params.get('body'):
-            logger.debug('')
-            logger.debug(params.get('body'))
+            logger.info('')
+            logger.info(params.get('body'))
 
         conn.request(
             params.method, params.url, params.get('body'), params.headers)
         ret = conn.getresponse()
         decodes = dict(params.decode)
-        logger.debug(f'decodes={decodes}')
+        logger.info(f'decodes={decodes}')
 
         if decodes.get('read'):
             ret = ret.read()
@@ -151,12 +177,37 @@ class DeclRESTRequest:
         if decodes.get('json'):
             ret = json.loads(ret)
 
-        logger.debug(f'rethooks={params.rethook}')
+        logger.info(f'rethooks={params.rethook}')
 
         for hook in params.rethook:
             ret = hook(ret)
 
         return ret
+
+    def build_format_source(self, params, *args, **kwargs):
+        format_source = dict(params)
+        format_source.update(kwargs)
+
+        if self.params_mutator is not None:
+            class _None:
+                pass
+
+            sig_params_dict = {}
+            sig_params = \
+                inspect.signature(self.params_mutator).parameters.items()
+
+            for (k, v), arg in zip_longest(sig_params, args, fillvalue=_None):
+                if k == 'params':
+                    continue
+
+                if arg is not _None:
+                    sig_params_dict[k] = arg
+                elif v.default is not inspect.Parameter.empty:
+                    sig_params_dict[k] = v.default
+
+            format_source.update(sig_params_dict)
+
+        return format_source
 
     def build_params(self, *args, **kwargs):
         params = copy.deepcopy(self.base_params)
@@ -172,7 +223,7 @@ class DeclRESTRequest:
                     del params[source_key]
 
         if self.params_mutator is not None:
-            new_params = self.params_mutator(params, *args, **kwargs)
+            new_params = self.params_mutator(*args, **kwargs, params=params)
 
             if isinstance(new_params, dict):
                 params = new_params
@@ -204,6 +255,8 @@ class DeclRESTRequest:
                 logger.debug(f'format: {obj} -> {formatted_str}')
                 return formatted_str
 
+            logger.info(f'format({repr(obj)})')
+
             if isinstance(obj, str):
                 return obj
 
@@ -225,7 +278,7 @@ class DeclRESTRequest:
 
     # noinspection PyShadowingNames
     def format_params(self, params, format_source):
-        url = _path = format_source['path']
+        _path = format_source['path']
         _splitter = '?' if '?' not in _path else '&'
 
         formatted_params = copy.deepcopy(params)
@@ -234,6 +287,7 @@ class DeclRESTRequest:
             key, value = map(self.formatter(format_source), item)
             formatted_params[key] = value
 
+        url = _single(formatted_params, 'path')
         query = urllib.parse.urlencode(formatted_params.query, doseq=True)
 
         if query:
@@ -307,7 +361,7 @@ def endpoint(value):
     return lambda obj: _add_param(obj, endpoint=value)
 
 
-def method(value, path='/'):
+def method(value, path=None):
     """Set method and path."""
     return lambda obj: _add_param(obj, method=value, path=path)
 

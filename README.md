@@ -1,5 +1,5 @@
 # DeclREST
-Declarative RESTful API Client for python.
+Declarative RESTful API client for python.
 
 Requires python 3.6+
 
@@ -21,9 +21,11 @@ It's a piece of cake, isn't it?
 
 ```python
 @endpoint('http://whatsmyuseragent.org')
+@header('User-Agent', f('{my_user_agent}'))
 @findall(r'user-agent.*\s*.*intro-text.*?>([^<]*)')
 @rethook(lambda r: r[0])
-def get_my_user_agent(params, my_user_agent='DeclREST/1.0'):
+def get_my_user_agent(my_user_agent='DeclREST/1.0', params=None):
+    # or
     params.headers['User-Agent'] = my_user_agent
 
 get_my_user_agent('Test-UA')  # returns 'Test-UA'
@@ -33,9 +35,25 @@ get_my_user_agent('Test-UA')  # returns 'Test-UA'
 - `@findall` finds all matches using `re.findall()`.
 - `@rethook` hooks the return value and mutates it.
 
-String-formatting is also supported using `str.format()` syntax in python.
+### How about this?
 
-(WIP) Also, `self` can be used for formatting in your class.
+```python
+class Repo:
+    @classmethod
+    @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
+    @decode()
+    def get_repo(cls, user_id, repo='declrest', *, params):  # or declare params as keyword argument using *
+        # or
+        params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
+
+class Github(Repo):
+    pass
+
+Github.get_repo('qbx2')
+```
+
+String-formatting is also supported using `str.format()` syntax in python.
+Supported keys are the names of parameters passed to the function and keys in `params`.
 
 Checkout test.py for more usage.
 

@@ -1,10 +1,10 @@
 import logging
 
-from declrest import endpoint, GET, query, form, header, f, body, read, \
+from declrest import endpoint, GET, query, form, header, f, body, \
     json_decode, decode, findall, rethook
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     @endpoint('https://api.ipify.org')
     @decode()
@@ -12,9 +12,11 @@ if __name__ == '__main__':
         pass
 
     @endpoint('http://whatsmyuseragent.org')
+    @header('User-Agent', f('{my_user_agent}'))
     @findall(r'user-agent.*\s*.*intro-text.*?>([^<]*)')
     @rethook(lambda r: r[0])
-    def get_my_user_agent(params, my_user_agent='DeclREST/1.0'):
+    def get_my_user_agent(my_user_agent='DeclREST/1.0', params=None):
+        # or
         params.headers['User-Agent'] = my_user_agent
 
     @endpoint('http://samples.openweathermap.org')
@@ -36,3 +38,16 @@ if __name__ == '__main__':
     print(get_my_ip())
     print(get_my_user_agent('TEST-UA'))
     print(get_weather())
+
+    class Repo:
+        @classmethod
+        @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
+        @decode()
+        def get_repo(cls, user_id, repo='declrest', *, params):
+            # or
+            params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
+
+    class Github(Repo):
+        pass
+
+    Github.get_repo('qbx2')
