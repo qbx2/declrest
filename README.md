@@ -23,7 +23,7 @@ It's a piece of cake, isn't it?
 @endpoint('http://whatsmyuseragent.org')
 @header('User-Agent', f('{my_user_agent}'))
 @findall(r'user-agent.*\s*.*intro-text.*?>([^<]*)')
-@rethook(lambda r: r[0])
+@retmap(lambda r: r[0])
 def get_my_user_agent(my_user_agent='DeclREST/1.0', params=None):
     # or
     params.headers['User-Agent'] = my_user_agent
@@ -33,15 +33,15 @@ get_my_user_agent('Test-UA')  # returns 'Test-UA'
 
 - The function body can mutate the request parameters without any limitation.
 - `@findall` finds all matches using `re.findall()`.
-- `@rethook` hooks the return value and mutates it.
+- `@retmap` maps the return value as built-in map.
 
-### How about this?
+### How about this example?
 
 ```python
 @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
 class Repo:
     @classmethod
-    @GET()  # at least one DeclREST decorator is required
+    @GET()                                                   # at least one DeclREST decorator is required
     def get_repo(cls, user_id, repo='declrest', *, params):  # mark params as keyword argument using *
         # or
         # params.endpoint = f'{cls.__name__}.com/{user_id}/{repo}'
