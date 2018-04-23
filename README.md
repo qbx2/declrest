@@ -63,4 +63,5 @@ Please check out test.py for more usage.
 ## Todo list
 - Support for sequenced query/body. ex) filename[]=..&filename[]=..
 - Support for asyncio
+- Add tests
 - Add details for README.md
