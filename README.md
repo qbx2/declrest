@@ -3,6 +3,8 @@ Declarative RESTful API client for python.
 
 Requires python 3.6+
 
+Install using: `pip install declrest`
+
 ---
 
 Easily declare your RESTful API and use it directly.

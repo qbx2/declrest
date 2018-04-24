@@ -5,6 +5,8 @@ setup(
     name='DeclREST',
     version='1.0',
     description='Declarative RESTful API Client for python',
-    author='Sunyeop Lee <sunyeop97@gmail.com>',
+    author='Sunyeop Lee',
+    author_email='sunyeop97@gmail.com',
     py_modules=['declrest'],
+    url='https://github.com/qbx2/declrest',
 )
