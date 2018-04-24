@@ -65,3 +65,6 @@ Please check out test.py for more usage.
 - Support for asyncio
 - Add tests
 - Add details for README.md
+
+## Known issues
+- `@staticmethod` cannot access to base parameters declared on class
