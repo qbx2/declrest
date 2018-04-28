@@ -37,6 +37,16 @@ get_my_user_agent('Test-UA')  # returns 'Test-UA'
 - `@findall` finds all matches using `re.findall()`.
 - `@retmap` maps the return value as built-in map.
 
+### @retmap
+retmap is evaluated in the order of outside-first
+  ex) `ret` equals to `f2(f1(ret))` in the example.
+```python
+    @retmap(f1)
+    @retmap(f2)
+    def func(params):
+        pass
+```
+
 ### How about this example?
 
 ```python
@@ -66,7 +76,4 @@ Please check out test.py for more usage.
 - Support for sequenced query/body. ex) filename[]=..&filename[]=..
 - Support for asyncio
 - Add tests
-- Add details for README.md
-
-## Known issues
-- `@staticmethod` cannot access to base parameters declared on class
+- Add details to README.md

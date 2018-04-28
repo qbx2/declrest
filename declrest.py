@@ -132,7 +132,10 @@ class DeclRESTRequest:
                     del params[source_key]
 
         if self.params_mutator is not None:
-            new_params = self.params_mutator(*args, **kwargs, params=params)
+            # TODO: append params to params
+            kwargs['params'] = \
+                self.update_params(params, kwargs.get('params', {}))
+            new_params = self.params_mutator(*args, **kwargs)
 
             if isinstance(new_params, dict):
                 params = type(params)(new_params)
@@ -170,13 +173,16 @@ class DeclRESTRequest:
         params.path = path_
         params.timeout = _maybe(params, 'timeout')
 
-        format_source = self.build_format_source(params, *args, **kwargs)
-        logger.info(f'format_source={format_source}')
+        # TODO: append params to params
+        kwargs.update(params=params)
+
+        format_source = self.build_format_source(*args, **kwargs)
+        logger.debug(f'format_source={format_source}')
 
         params = self.format_params(params, format_source)
         return params
 
-    def build_format_source(self, params, *args, **kwargs):
+    def build_format_source(self, *args, params, **kwargs):
         format_source = dict(params)
 
         sig_params_dict = {}
@@ -222,45 +228,27 @@ class DeclRESTRequest:
     def __call__(self, *args, **kwargs):
         params = self.build_params(*args, **kwargs)
 
-        logger.info(f'params: {params}')
-        logger.info(f'endpoint={params.endpoint}, timeout={params.timeout}')
+        logger.debug(f'params: {params}')
+        logger.debug(f'endpoint={params.endpoint}, timeout={params.timeout}')
 
         conn = self.create_connection(
             params.scheme, params.endpoint, params.timeout)
         # noinspection PyProtectedMember
-        logger.info(f'{params.method} {params.url} {conn._http_vsn_str}')
+        logger.debug(f'{params.method} {params.url} {conn._http_vsn_str}')
 
         for k, v in params.headers.items():
-            logger.info(f'{k}: {v}')
+            logger.debug(f'{k}: {v}')
 
         if params.body:
-            logger.info('')
-            logger.info(params.body)
+            logger.debug('')
+            logger.debug(params.body)
 
         conn.request(params.method, params.url, params.body, params.headers)
         ret = conn.getresponse()
-        decodes = dict(params.decode)
-        logger.info(f'decodes={decodes}')
 
-        if decodes.get('read'):
-            ret = ret.read()
+        logger.debug(f'retmaps={params.retmap}')
 
-        encoding = decodes.get('decode')
-
-        if encoding is not None:
-            ret = ret.decode(encoding)
-
-        regex, flags = decodes.get('findall', (None, 0))
-
-        if regex is not None:
-            ret = re.findall(regex, ret, flags)
-
-        if decodes.get('json'):
-            ret = json.loads(ret)
-
-        logger.info(f'rethooks={params.rethook}')
-
-        for hook in params.rethook:
+        for hook in reversed(params.retmap):
             ret = hook(ret)
 
         return ret
@@ -319,7 +307,7 @@ class DeclRESTRequest:
                 logger.debug(f'format: {obj} -> {formatted_str}')
                 return formatted_str
 
-            logger.info(f'format({repr(obj)})')
+            logger.debug(f'format({repr(obj)})')
 
             if isinstance(obj, str):
                 return obj
@@ -376,6 +364,22 @@ class DeclRESTRequest:
 
         return formatted_params
 
+    @staticmethod
+    def update_params(params, new_params):
+        # params = old_params.copy()
+
+        for k, v in new_params.items():
+            print(k, v)
+            if k in params and params[k] is not None:
+                if isinstance(params[k], dict):
+                    params[k].update(v)
+                else:
+                    params[k] += v
+            else:
+                params[k] = v
+
+        return params
+
 
 class DeclFormatString(str):
     pass
@@ -418,7 +422,7 @@ def _add_param(obj, **kwargs):
 
         desc = obj
     else:
-        desc = DeclRESTParamsDescriptor(obj)
+        desc = functools.update_wrapper(DeclRESTParamsDescriptor(obj), obj)
 
     for k, v in kwargs.items():
         desc.declrest_base_params.append(k, v)
@@ -434,6 +438,7 @@ def endpoint(value):
 def method(value, path=None):
     """Set method and path."""
     return lambda obj: _add_param(obj, method=value, path=path)
+
 
 GET = functools.partial(method, 'GET')
 POST = functools.partial(method, 'POST')
@@ -474,6 +479,7 @@ def formatted(fs):
     """Annotate given string to be formatted."""
     return DeclFormatString(fs)
 
+
 f = formatted
 
 
@@ -489,32 +495,23 @@ def encode(encoding='utf-8'):
     return lambda obj: _add_param(obj, encode=('encode', encoding))
 
 
-def read(value=True):
+def read():
     """ret = HTTPResponse.read()"""
-    return lambda obj: _add_param(obj, decode=('read', value))
+    return lambda obj: _add_param(obj, retmap=lambda r: r.read())
 
 
 def decode(encoding='utf-8'):
     """ret = ret.decode(encoding)"""
     def decorator(obj):
-        obj = _add_param(obj, decode=('decode', encoding))
-        # Set read=True implicitly
-        obj = _add_param(obj, decode=('read', True))
-        return obj
+        return _add_param(obj, retmap=lambda r: r.decode(encoding))
 
     return decorator
 
 
-def json_decode(value=True):
+def json_decode():
     """ret = json.loads(ret)"""
     def decorator(obj):
-        obj = _add_param(obj, decode=('json', value))
-
-        # if True, set read=True implicitly
-        if value:
-            obj = _add_param(obj, decode=('read', True))
-
-        return obj
+        return _add_param(obj, retmap=lambda r: json.loads(json))
 
     return decorator
 
@@ -522,15 +519,11 @@ def json_decode(value=True):
 def findall(regex, flags=0):
     """ret = re.findall(regex, ret)"""
     def decorator(obj):
-        obj = _add_param(obj, decode=('findall', (regex, flags)))
-        # Set read=True implicitly
-        obj = _add_param(obj, decode=('read', True))
-        obj = _add_param(obj, decode=('decode', 'utf-8'))
-        return obj
+        return _add_param(obj, retmap=lambda r: re.findall(regex, r, flags))
 
     return decorator
 
 
 def retmap(hook):
     """ret = hook(ret)"""
-    return lambda obj: _add_param(obj, rethook=hook)
+    return lambda obj: _add_param(obj, retmap=hook)
