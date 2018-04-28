@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
     name='DeclREST',
-    version='1.0.1',
+    version='1.0.2',
     description='Declarative RESTful API Client for python',
     author='Sunyeop Lee',
     author_email='sunyeop97@gmail.com',
