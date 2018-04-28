@@ -1,3 +1,5 @@
+[![PyPI](https://img.shields.io/pypi/v/declrest.svg)](https://github.com/qbx2/declrest)
+
 # DeclREST
 Declarative RESTful API client for python.
 
