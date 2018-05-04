@@ -79,3 +79,7 @@ Please check out test.py for more usage.
 - Support for asyncio
 - Add tests
 - Add details to README.md
+
+## Contribution
+
+Contributions are welcome.
