@@ -10,6 +10,7 @@ from collections import Sequence
 from itertools import zip_longest
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 
 class DeclRESTParams(dict):
