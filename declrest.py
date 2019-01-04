@@ -443,6 +443,7 @@ def method(value, path=None):
 
 GET = functools.partial(method, 'GET')
 POST = functools.partial(method, 'POST')
+PUT = functools.partial(method, 'PUT')
 PATCH = functools.partial(method, 'PATCH')
 DELETE = functools.partial(method, 'DELETE')
 HEAD = functools.partial(method, 'HEAD')
