@@ -513,7 +513,7 @@ def decode(encoding='utf-8'):
 def json_decode():
     """ret = json.loads(ret)"""
     def decorator(obj):
-        return _add_param(obj, retmap=lambda r: json.loads(json))
+        return _add_param(obj, retmap=lambda r: json.loads(r))
 
     return decorator
 
