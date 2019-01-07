@@ -8,6 +8,7 @@ import re
 import urllib.parse
 from collections import Sequence
 from itertools import zip_longest
+from pprint import pprint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -443,6 +444,38 @@ def _add_param(obj, **kwargs):
     return desc
 
 
+def _composite(*args):
+    # args: [(fn, args, kwargs), ...]
+    def argmap(arg):
+        if isinstance(arg, Sequence):
+            len_ = len(arg)
+            if len_ > 3:
+                raise ValueError(f'Invalid arg {arg} to _composite')
+            ret = tuple(arg) + ([], {})[len_:]
+        elif callable(arg):
+            ret = (arg, [], {})
+        else:
+            raise ValueError(f'Invalid arg {arg} to _composite')
+        if not callable(ret[0]):
+            raise ValueError(f'Expected fn to be callable: {arg}')
+        return ret
+
+    def decorator(*args_, **kwargs_):
+        # TODO: allow overrides by args_, kwargs_?
+        instances = [
+            fn(*args__, **kwargs__) for fn, args__, kwargs__ in map(argmap, args)
+        ]
+
+        def _decorator(obj):
+            for dec in reversed(instances):
+                obj = dec(obj)
+            return obj
+
+        return _decorator
+
+    return decorator
+
+
 def endpoint(value):
     """Set endpoint. http and https are supported."""
     return lambda obj: _add_param(obj, endpoint=value)
@@ -522,6 +555,9 @@ def decode(encoding='utf-8'):
     return decorator
 
 
+read_decode = _composite(read, decode)
+
+
 def json_decode():
     """ret = json.loads(ret)"""
     def decorator(obj):
@@ -541,3 +577,15 @@ def findall(regex, flags=0):
 def retmap(hook):
     """ret = hook(ret)"""
     return lambda obj: _add_param(obj, retmap=hook)
+
+
+def passthru(fn, *args, **kwargs):
+    """hook(ret)"""
+    def fn_wrapper(ret):
+        fn(ret, *args, **kwargs)
+        return ret
+    return lambda obj: _add_param(obj, retmap=fn_wrapper)
+
+
+print_ = functools.partial(passthru, print)
+pprint = functools.partial(passthru, pprint)
