@@ -39,14 +39,12 @@ get_my_user_agent('Test-UA')  # returns 'Test-UA'
 - `@findall` finds all matches using `re.findall()`.
 - `@retmap` maps the return value as built-in map.
 
-### @retmap
-retmap is evaluated in the order of outside-first
-  ex) `ret` equals to `f2(f1(ret))` in the example.
+### retmap
 ```python
-    @retmap(f1)
-    @retmap(f2)
     def func(params):
-        pass
+        def retmap(resp):
+            return resp.read().decode().upper()
+        return retmap
 ```
 
 ### How about this example?
@@ -72,13 +70,14 @@ You can provide default decorators for methods by decorating classes like above.
 Also, string-formatting is also supported using `str.format()` syntax in python.
 Supported keys are the names of parameters passed to the function and keys in `params`.
 
-Please check out test.py for more usage.
+Please check out for test.py for more usage.
 
 ## Todo list
 - Support for sequenced query/body. ex) filename[]=..&filename[]=..
 - Support for asyncio
 - Add tests
 - Add details to README.md
+- Add docs
 
 ## Contribution
 
