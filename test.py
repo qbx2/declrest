@@ -30,9 +30,23 @@ if __name__ == '__main__':
         params.headers['X-Powered-By'] = 'declrest'
         print('params:', params)
 
+    # using retmap from params_mutator
+    @endpoint('https://samples.openweathermap.org')
+    @GET('/data/2.5/weather')
+    @query('q', 'London,uk')
+    @query('appid', 'b6907d289e10d714a6e88b30761fae22')
+    @header('User-Agent', 'DeclREST/1.0')
+    def get_weather2(params):
+        def retmap(resp):
+            return json.loads(resp.read().decode())
+
+        return retmap
+        print('params:', params)
+
     print(get_my_ip())
     print(get_my_user_agent('TEST-UA'))
     print(get_weather())
+    print(get_weather2())
 
     @endpoint(f('https://{cls.__name__}.com/{user_id}/{repo}'))
     class Repo:

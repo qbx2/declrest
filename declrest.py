@@ -115,6 +115,7 @@ class DeclRESTRequest:
 
     def build_params(self, *args, **kwargs):
         params = self.get_declrest_base_params(*args)
+        retmap = None
         logger.debug(f'declrest_base_params={params}')
 
         if params is None:
@@ -140,6 +141,15 @@ class DeclRESTRequest:
 
             if isinstance(new_params, dict):
                 params = type(params)(new_params)
+            elif isinstance(new_params, tuple):
+                params, retmap = new_params
+                assert callable(retmap)
+            elif callable(new_params):
+                retmap = new_params
+            elif new_params is None:
+                pass
+            else:
+                raise ValueError(f'params_mutator has returned unsupported type: {new_params}')
 
         endpoint_ = _single(params, 'endpoint')
         scheme_, netloc_, *_path_components = \
@@ -181,7 +191,7 @@ class DeclRESTRequest:
         logger.debug(f'format_source={format_source}')
 
         params = self.format_params(params, format_source)
-        return params
+        return params, retmap
 
     def build_format_source(self, *args, params, **kwargs):
         format_source = dict(params)
@@ -227,7 +237,7 @@ class DeclRESTRequest:
         return format_source
 
     def __call__(self, *args, **kwargs):
-        params = self.build_params(*args, **kwargs)
+        params, retmap = self.build_params(*args, **kwargs)
 
         logger.debug(f'params: {params}')
         logger.debug(f'endpoint={params.endpoint}, timeout={params.timeout}')
@@ -251,6 +261,9 @@ class DeclRESTRequest:
 
         for hook in reversed(params.retmap):
             ret = hook(ret)
+
+        if retmap is not None:
+            ret = retmap(ret)
 
         return ret
 
@@ -370,7 +383,6 @@ class DeclRESTRequest:
         # params = old_params.copy()
 
         for k, v in new_params.items():
-            print(k, v)
             if k in params and params[k] is not None:
                 if isinstance(params[k], dict):
                     params[k].update(v)
